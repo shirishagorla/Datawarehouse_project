@@ -122,7 +122,183 @@ SELECT
         ) - INTERVAL 1 DAY
         AS DATE
     ) AS prd_end_dt
-FROM datawarehouse_bronze.crm_prd_info;
+
+
+INSERT INTO datawarehouse_sliver.crm_sales_dteails (
+    sls_ord_num,
+    sls_prd_key,
+    sls_cust_id,
+    sls_order_dt,
+    sls_ship_dt,
+    sls_due_dt,
+    sls_sales,
+    sls_quantity,
+    sls_price
+)
+SELECT 
+    sls_ord_num,
+    sls_prd_key,
+    sls_cust_id,
+
+    CASE 
+        WHEN sls_order_dt IS NULL
+             OR TRIM(sls_order_dt) = ''
+             OR TRIM(sls_order_dt) = '0'
+             OR LENGTH(TRIM(sls_order_dt)) != 8
+        THEN NULL
+        ELSE STR_TO_DATE(TRIM(sls_order_dt), '%Y%m%d')
+    END AS sls_order_dt,
+
+    CASE 
+        WHEN sls_ship_dt IS NULL
+             OR TRIM(sls_ship_dt) = ''
+             OR TRIM(sls_ship_dt) = '0'
+             OR LENGTH(TRIM(sls_ship_dt)) != 8
+        THEN NULL
+        ELSE STR_TO_DATE(TRIM(sls_ship_dt), '%Y%m%d')
+    END AS sls_ship_dt,
+
+    CASE 
+        WHEN sls_due_dt IS NULL
+             OR TRIM(sls_due_dt) = ''
+             OR TRIM(sls_due_dt) = '0'
+             OR LENGTH(TRIM(sls_due_dt)) != 8
+        THEN NULL
+        ELSE STR_TO_DATE(TRIM(sls_due_dt), '%Y%m%d')
+    END AS sls_due_dt,
+
+    CASE 
+        WHEN sls_sales IS NULL 
+             OR sls_sales <= 0 
+             OR sls_sales != sls_price * ABS(sls_quantity)
+        THEN sls_price * ABS(sls_quantity)
+        ELSE sls_sales
+    END AS sls_sales,
+
+    sls_quantity,
+
+    CASE 
+        WHEN sls_price IS NULL 
+             OR sls_price <= 0 
+        THEN ABS(sls_sales) / NULLIF(sls_quantity, 0)
+        ELSE sls_price
+    END AS sls_price
+
+FROM datawarehouse_bronze.crm_sales_dteails;
+
+/*
+=============================================================
+ETL Script: Bronze to Silver - ERP Customer Demographics
+=============================================================
+Script Purpose:
+    This script cleanses and standardizes customer demographic 
+    data from 'datawarehouse_bronze.erp_cust_az12' and inserts 
+    it into 'datawarehouse_silver.erp_cust_az12'.
+
+Transformations Applied:
+    1. Key Cleansing: Strips the 'NAS' prefix from 'cid' using SUBSTRING.
+    2. Date Validation: Converts future birth dates to NULL.
+    3. Gender Standardization: Maps 'F' / 'FEMALE' to 'Female', 
+       'M' / 'MALE' to 'Male', and defaults unmapped values to 'n/a'.
+*/
+
+USE datawarehouse_silver;
+
+-- Optional: Truncate target table before load to ensure idempotent execution
+TRUNCATE TABLE erp_cust_az12;
+
+INSERT INTO datawarehouse_silver.erp_cust_az12 (
+    cid,
+    bdate,
+    gen
+)
+SELECT 
+    CASE 
+        WHEN cid LIKE 'NAS%' THEN SUBSTRING(cid, 4, LENGTH(cid))
+        ELSE cid 
+    END AS cid,
+
+    CASE 
+        WHEN bdate > CURRENT_DATE() THEN NULL
+        ELSE bdate
+    END AS bdate,
+
+    CASE 
+        WHEN UPPER(TRIM(gen)) IN ('F', 'FEMALE') THEN 'Female'
+        WHEN UPPER(TRIM(gen)) IN ('M', 'MALE') THEN 'Male'
+        ELSE 'n/a'
+    END AS gen
+
+FROM datawarehouse_bronze.erp_cust_az12;
+
+/*
+=============================================================
+ETL Script: Bronze to Silver - ERP Location Data
+=============================================================
+Script Purpose:
+    This script cleanses and standardizes location data from 
+    'datawarehouse_bronze.erp_loc_a101' and loads it into 
+    'datawarehouse_silver.erp_loc_a101'.
+
+Transformations Applied:
+    1. Key Cleansing: Removes hyphens from 'cid' using REPLACE.
+    2. Country Standardization: Maps country codes ('DE', 'US', 'USA') 
+       to full country names ('Germany', 'United States') and handles 
+       empty/NULL values as 'n/a'.
+*/
+
+USE datawarehouse_silver;
+
+-- Optional: Truncate target table before load to ensure idempotent execution
+TRUNCATE TABLE erp_loc_a101;
+
+INSERT INTO datawarehouse_silver.erp_loc_a101 (
+    cid,
+    cntry
+)
+SELECT 
+    REPLACE(cid, '-', '') AS cid,
+
+    CASE 
+        WHEN TRIM(cntry) = 'DE' THEN 'Germany'
+        WHEN TRIM(cntry) IN ('US', 'USA') THEN 'United States'
+        WHEN TRIM(cntry) = '' OR cntry IS NULL THEN 'n/a'
+        ELSE TRIM(cntry)
+    END AS cntry
+
+FROM datawarehouse_bronze.erp_loc_a101;
+/*
+=============================================================
+ETL Script: Bronze to Silver - ERP Product Categories
+=============================================================
+Script Purpose:
+    This script transfers product category data from 
+    'datawarehouse_bronze.erp_px_cat_g1v2' into 
+    'datawarehouse_silver.erp_px_cat_g1v2'.
+
+Transformations Applied:
+    1. Data Hygiene: Trims whitespace from text attributes.
+    2. Column Mapping: Explicitly maps product category IDs, categories, 
+       subcategories, and maintenance flags.
+*/
+
+USE datawarehouse_silver;
+
+-- Optional: Truncate target table before load to ensure idempotent execution
+TRUNCATE TABLE erp_px_cat_g1v2;
+
+INSERT INTO datawarehouse_silver.erp_px_cat_g1v2 (
+    id,
+    cat,
+    subcat,
+    maintenance
+)
+SELECT 
+    TRIM(id)          AS id,
+    TRIM(cat)         AS cat,
+    TRIM(subcat)      AS subcat,
+    TRIM(maintenance) AS maintenance
+FROM datawarehouse_bronze.erp_px_cat_g1v2;
 
 -- Verification Query
-SELECT * FROM datawarehouse_silver.crm_prd_info;
+SELECT * FROM datawarehouse_silver.erp_px_cat_g1v2;
