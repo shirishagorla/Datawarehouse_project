@@ -37,7 +37,7 @@ IGNORE 1 ROWS;
 
 -- Load Sales Details
 LOAD DATA LOCAL INFILE 'C:/Users/PC/Downloads/source_crm/sales_details.csv'
-INTO TABLE crm_sales_details
+INTO TABLE crm_sales_dteails
 FIELDS TERMINATED BY ','
 ENCLOSED BY '"'
 LINES TERMINATED BY '\r\n'
