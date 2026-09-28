@@ -1,0 +1,67 @@
+/*
+=============================================================
+ETL Script: Bronze to Silver - Customer Information
+=============================================================
+Script Purpose:
+    This script cleanses, deduplicates, and standardizes customer 
+    master data from 'datawarehouse_bronze.crm_cust_info' and loads 
+    the transformed result into 'datawarehouse_silver.crm_cust_info'.
+
+Transformations Applied:
+    1. Deduplication: Filters for the most recent record per 'cst_id' 
+       using ROW_NUMBER() based on 'cst_create_date'.
+    2. Data Hygiene: Removes unwanted zero IDs (WHERE cst_id != 0) and 
+       trims leading/trailing whitespace from names.
+    3. Standardization: Converts coded strings ('S', 'M', 'F') into 
+       readable descriptive attributes ('Single', 'Married', 'Female', 'Male') 
+       with a fallback 'n/a' value.
+*/
+
+USE datawarehouse_silver;
+
+-- Optional: Truncate target table before load to ensure idempotent executions
+TRUNCATE TABLE crm_cust_info;
+
+INSERT INTO crm_cust_info
+(
+    cst_id,
+    cst_key,
+    cst_firstname,
+    cst_lastname,
+    cst_marital_status,
+    cst_gndr,
+    cst_create_date
+)
+SELECT
+    cst_id,
+    cst_key,
+    TRIM(cst_firstname) AS cst_firstname,
+    TRIM(cst_lastname)  AS cst_lastname,
+
+    CASE
+        WHEN UPPER(TRIM(cst_marital_status)) = 'S' THEN 'Single'
+        WHEN UPPER(TRIM(cst_marital_status)) = 'M' THEN 'Married'
+        ELSE 'n/a'
+    END AS cst_marital_status,
+
+    CASE
+        WHEN UPPER(TRIM(cst_gndr)) = 'F' THEN 'Female'
+        WHEN UPPER(TRIM(cst_gndr)) = 'M' THEN 'Male'
+        ELSE 'n/a'
+    END AS cst_gndr,
+
+    cst_create_date
+
+FROM
+(
+    SELECT
+        *,
+        ROW_NUMBER() OVER (
+            PARTITION BY cst_id
+            ORDER BY cst_create_date DESC
+        ) AS flag_last
+    FROM datawarehouse_bronze.crm_cust_info
+    WHERE cst_id IS NOT NULL AND cst_id != 0
+) t
+
+WHERE flag_last = 1;
