@@ -1,0 +1,220 @@
+```sql
+/*
+===============================================================================
+Silver Layer - Data Quality Checks
+===============================================================================
+
+Script Purpose:
+    This script performs various quality checks for data consistency,
+    accuracy, and standardization across the Silver Layer.
+
+    The checks include:
+        - NULL or duplicate primary keys
+        - Unwanted spaces in string fields
+        - Data standardization and consistency
+        - Invalid date ranges
+        - Invalid numeric values
+        - Data consistency between related fields
+        - Referential consistency checks
+
+Usage Notes:
+    - Run these checks after loading and transforming data into the Silver Layer.
+    - The expected result for validation checks is usually NO ROWS.
+    - If records are returned, investigate the data and transformation logic.
+    - These checks should be completed before using the Silver Layer
+      for Gold Layer transformations and analytics.
+
+===============================================================================
+*/
+
+
+USE datawarehouse_sliver;
+
+
+/*
+===============================================================================
+1. Checking: crm_cust_info
+===============================================================================
+*/
+
+
+-- ---------------------------------------------------------------------------
+-- Check for NULLs or Duplicates in Primary Key
+-- Expectation: No Results
+-- ---------------------------------------------------------------------------
+
+SELECT
+    cst_id,
+    COUNT(*) AS record_count
+FROM crm_cust_info
+GROUP BY cst_id
+HAVING COUNT(*) > 1
+    OR cst_id IS NULL;
+
+
+-- ---------------------------------------------------------------------------
+-- Check for Unwanted Spaces
+-- Expectation: No Results
+-- ---------------------------------------------------------------------------
+
+SELECT
+    cst_key
+FROM crm_cust_info
+WHERE cst_key <> TRIM(cst_key);
+
+
+-- ---------------------------------------------------------------------------
+-- Data Standardization & Consistency
+-- Review distinct marital status values
+-- ---------------------------------------------------------------------------
+
+SELECT DISTINCT
+    cst_marital_status
+FROM crm_cust_info
+ORDER BY cst_marital_status;
+
+
+/*
+===============================================================================
+2. Checking: crm_prd_info
+===============================================================================
+*/
+
+
+-- ---------------------------------------------------------------------------
+-- Check for NULLs or Duplicates in Primary Key
+-- Expectation: No Results
+-- ---------------------------------------------------------------------------
+
+SELECT
+    prd_id,
+    COUNT(*) AS record_count
+FROM crm_prd_info
+GROUP BY prd_id
+HAVING COUNT(*) > 1
+    OR prd_id IS NULL;
+
+
+-- ---------------------------------------------------------------------------
+-- Check for Unwanted Spaces in Product Name
+-- Expectation: No Results
+-- ---------------------------------------------------------------------------
+
+SELECT
+    prd_nm
+FROM crm_prd_info
+WHERE prd_nm <> TRIM(prd_nm);
+
+
+-- ---------------------------------------------------------------------------
+-- Check for NULLs or Negative Values in Cost
+-- Expectation: No Results
+-- ---------------------------------------------------------------------------
+
+SELECT
+    prd_cost
+FROM crm_prd_info
+WHERE prd_cost < 0
+    OR prd_cost IS NULL;
+
+
+-- ---------------------------------------------------------------------------
+-- Data Standardization & Consistency
+-- Review distinct product line values
+-- ---------------------------------------------------------------------------
+
+SELECT DISTINCT
+    prd_line
+FROM crm_prd_info
+ORDER BY prd_line;
+
+
+-- ---------------------------------------------------------------------------
+-- Check for Invalid Date Orders
+-- Product End Date should not be before Product Start Date
+-- Expectation: No Results
+-- ---------------------------------------------------------------------------
+
+SELECT
+    *
+FROM crm_prd_info
+WHERE prd_end_dt < prd_start_dt;
+
+
+/*
+===============================================================================
+3. Checking: crm_sales_details
+===============================================================================
+*/
+
+
+-- ---------------------------------------------------------------------------
+-- Check for Invalid Order Dates
+-- Expectation: No Results
+--
+-- A valid date should:
+--     - Not be NULL
+--     - Not be before 1900-01-01
+--     - Not be after 2050-01-01
+-- ---------------------------------------------------------------------------
+
+SELECT
+    sls_ord_num,
+    sls_order_dt,
+    sls_ship_dt,
+    sls_due_dt
+FROM crm_sales_details
+WHERE sls_order_dt IS NULL
+   OR sls_order_dt < '1900-01-01'
+   OR sls_order_dt > '2050-01-01';
+
+
+-- ---------------------------------------------------------------------------
+-- Check for Invalid Shipping Dates
+-- Expectation: No Results
+-- ---------------------------------------------------------------------------
+
+SELECT
+    sls_ord_num,
+    sls_order_dt,
+    sls_ship_dt
+FROM crm_sales_details
+WHERE sls_ship_dt IS NULL
+   OR sls_ship_dt < '1900-01-01'
+   OR sls_ship_dt > '2050-01-01';
+
+
+-- ---------------------------------------------------------------------------
+-- Check for Invalid Due Dates
+-- Expectation: No Results
+-- ---------------------------------------------------------------------------
+
+SELECT
+    sls_ord_num,
+    sls_order_dt,
+    sls_due_dt
+FROM crm_sales_details
+WHERE sls_due_dt IS NULL
+   OR sls_due_dt < '1900-01-01'
+   OR sls_due_dt > '2050-01-01';
+
+
+-- ---------------------------------------------------------------------------
+-- Check Invalid Date Orders
+-- Order Date should not be after Shipping Date or Due Date
+-- Expectation: No Results
+-- ---------------------------------------------------------------------------
+
+SELECT
+    *
+FROM crm_sales_details
+WHERE sls_order_dt > sls_ship_dt
+   OR sls_order_dt > sls_due_dt;
+
+
+-- ---------------------------------------------------------------------------
+-- Check Data Consistency
+-- Sales = Quantity * Price
+-- Expectation: No Results
+-- ---------------------------
+```
