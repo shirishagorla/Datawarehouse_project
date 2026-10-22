@@ -1,3 +1,17 @@
+/*
+=========================================================================================
+create databases
+==========================================================================================
+Script purpose:
+
+this script creates a new databases named Datawarehouse_bronze,Datawarehouse_Sliver,Datawarehouse_gold after checking if it already exists.
+if the database exists ,if is dropped and recreted .
+
+Warning:
+Running this script will drop the entire Datawarehouse data base if it exists.
+all data in the database will be permantly delted.procedd with caustion and ensure you have proper backups before running this script.
+*/
+
 -- Delete the database if it already exists
 DROP DATABASE IF EXISTS  datawarehouse_bronze;
 
