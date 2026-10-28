@@ -1,0 +1,84 @@
+/*
+===============================================================================
+Script Purpose:
+    This script creates the views for the 'gold' layer in the data warehouse.
+    The Gold layer represents the dimensional model (Star Schema), combining 
+    cleansed data from the Silver layer into dimensions and facts ready for 
+    business intelligence and reporting.
+
+Views Created:
+    - gold_dim_customers: Customer dimension table integrating CRM and ERP data.
+    - gold_dim_product: Product dimension table integrating CRM and category data.
+    - gold_fact_sales: Sales fact table linking transactions to dimensions.
+
+Usage:
+    Run this script in your database to create or update the Gold layer views.
+===============================================================================
+*/
+
+-- ============================================================================
+-- 1. Creating Dimension: gold_dim_customers
+-- ============================================================================
+CREATE VIEW gold_dim_customers AS
+SELECT 
+    ROW_NUMBER() OVER (ORDER BY cst_id) AS customer_key,
+    cu.cst_id AS customer_id,
+    cu.cst_key AS customer_number,
+    cu.cst_firstname AS first_name,
+    cu.cst_lastname AS last_name,
+    loc.cntry AS country,
+    cu.cst_marital_status AS marital_status,
+    CASE 
+        WHEN cu.cst_gndr != 'n/a' THEN cu.cst_gndr 
+        ELSE COALESCE(ca.gen, 'n/a')
+    END AS gender,
+    ca.bdate AS birth_date,
+    cu.cst_create_date AS create_date
+FROM datawarehouse_sliver.sliver_crm_cust_info AS cu 
+LEFT JOIN datawarehouse_sliver.sliver_erp_cust_az12 AS ca 
+    ON cu.cst_key = ca.cid 
+LEFT JOIN datawarehouse_sliver.silver_erp_loc_a101 AS loc 
+    ON cu.cst_key = loc.cid;
+
+
+-- ============================================================================
+-- 2. Creating Dimension: gold_dim_product
+-- ============================================================================
+CREATE VIEW gold_dim_product AS
+SELECT 
+    ROW_NUMBER() OVER (ORDER BY pn.prd_start_dt, pn.prd_key) AS product_key,
+    pn.prd_id AS product_id,
+    pn.prd_key AS product_number,
+    pn.prd_nm AS product_name,
+    pn.cat_id AS category_id,
+    pc.cat AS category,
+    pc.subcat AS subcategory,
+    pc.maintenance,
+    pn.prd_cost AS cost,
+    pn.prd_line AS product_line,
+    pn.prd_start_dt AS start_date
+FROM datawarehouse_sliver.sliver_crm_prd_info AS pn 
+LEFT JOIN datawarehouse_sliver.silver_erp_px_cat_g1v2 AS pc 
+    ON pn.cat_id = pc.id 
+WHERE pn.prd_end_dt IS NULL;
+
+
+-- ============================================================================
+-- 3. Creating Fact Table: gold_fact_sales
+-- ============================================================================
+CREATE VIEW gold_fact_sales AS
+SELECT 
+    sd.sls_ord_num AS order_number,
+    pr.product_key,
+    cu.customer_key,
+    sd.sls_order_dt AS order_date,
+    sd.sls_ship_dt AS shipping_date,
+    sd.sls_due_dt AS due_date,
+    sd.sls_sales AS sales_amount,
+    sd.sls_quantity AS quantity,
+    sd.sls_price AS price 
+FROM datawarehouse_sliver.sliver_crm_sales_details AS sd 
+LEFT JOIN gold_dim_product AS pr 
+    ON sd.sls_prd_key = pr.product_number 
+LEFT JOIN gold_dim_customers AS cu 
+    ON sd.sls_cust_id = cu.customer_id;
